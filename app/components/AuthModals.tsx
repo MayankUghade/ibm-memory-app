@@ -1,6 +1,9 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { Eye, EyeOff } from "lucide-react";
+import { loginUser, registerUser } from "@/lib/api";
+import { saveToken } from "@/lib/auth";
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -10,6 +13,10 @@ interface AuthModalProps {
 
 export default function AuthModals({ isOpen, onClose, initialMode }: AuthModalProps) {
   const [mode, setMode] = useState<"login" | "register">(initialMode);
+
+  useEffect(() => {
+    setMode(initialMode);
+  }, [initialMode]);
   
   // Form states
   const [username, setUsername] = useState("");
@@ -19,6 +26,7 @@ export default function AuthModals({ isOpen, onClose, initialMode }: AuthModalPr
   // UI states
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
 
   if (!isOpen) return null;
 
@@ -28,33 +36,24 @@ export default function AuthModals({ isOpen, onClose, initialMode }: AuthModalPr
     setLoading(true);
 
     try {
-      const endpoint = mode === "login" ? "/api/auth/login" : "/api/auth/register";
-      const body = mode === "login" 
-        ? { email, password }
-        : { username, email, password };
-
-      const res = await fetch(`http://localhost:8000${endpoint}`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(body),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error || data.message || `${mode === "login" ? "Sign in" : "Registration"} failed`);
-      }
+      const data =
+        mode === "login"
+          ? await loginUser({ email, password })
+          : await registerUser({ username, email, password });
 
       if (data.token) {
-        localStorage.setItem("pf_token", data.token);
+        saveToken(data.token);
         window.location.href = "/camera";
       } else {
         throw new Error("No authentication token received from server");
       }
     } catch (err: any) {
-      setError(err.message || "An unexpected error occurred");
+      const message =
+        err?.response?.data?.error ||
+        err?.response?.data?.message ||
+        err?.message ||
+        "An unexpected error occurred";
+      setError(message);
     } finally {
       setLoading(false);
     }
@@ -134,18 +133,45 @@ export default function AuthModals({ isOpen, onClose, initialMode }: AuthModalPr
             />
           </div>
 
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor="password" className="text-zinc-300 text-sm font-medium">Password</label>
+        <div className="flex flex-col gap-1.5">
+          <label
+            htmlFor="password"
+            className="text-zinc-300 text-sm font-medium"
+          >
+            Password
+          </label>
+
+          <div className="relative">
             <input
               id="password"
-              type="password"
+              type={showPassword ? "text" : "password"}
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
-              className="bg-zinc-950 border border-zinc-700 rounded-md text-white px-3 py-2 text-sm focus:border-white focus:outline-none transition-colors placeholder-zinc-600"
+              className="w-full bg-zinc-950 border border-zinc-700 rounded-md text-white px-3 py-2 pr-10 text-sm focus:border-white focus:outline-none transition-colors placeholder-zinc-600"
             />
+
+            <button
+              type="button"
+              onClick={() =>
+                setShowPassword((prev) => !prev)
+              }
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 transition-colors"
+              aria-label={
+                showPassword
+                  ? "Hide password"
+                  : "Show password"
+              }
+            >
+              {showPassword ? (
+                <EyeOff size={18} />
+              ) : (
+                <Eye size={18} />
+              )}
+            </button>
           </div>
+        </div>
 
           <button 
             type="submit" 
