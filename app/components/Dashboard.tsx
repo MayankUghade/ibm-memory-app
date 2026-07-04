@@ -1,10 +1,19 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getPeople, Person } from "@/lib/api";
-import { User, Clock, Briefcase, MessageSquare, ChevronRight, Loader2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { getPeople, PersonPreview } from "@/lib/api";
+import {
+  User,
+  Clock,
+  Briefcase,
+  MessageSquare,
+  ChevronRight,
+  Loader2,
+  Camera,
+} from "lucide-react";
 
-// ─── helpers ────────────────────────────────────────────────────────────────
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString("en-US", {
@@ -26,30 +35,38 @@ function formatRelativeTime(iso: string) {
   return "Just now";
 }
 
-/** Group people by the date of their most recent encounter (or creation date) */
-function groupByDate(people: Person[]): Record<string, Person[]> {
-  return people.reduce<Record<string, Person[]>>((acc, person) => {
-    const anchor =
-      person.encounters[0]?.date ?? person.createdAt;
+// Group people by the date of their most recent encounter
+function groupByDate(people: PersonPreview[]): [string, PersonPreview[]][] {
+  const map = new Map<string, PersonPreview[]>();
+
+  for (const person of people) {
+    const anchor = person.encounters[0]?.date ?? person.createdAt;
     const label = formatDate(anchor);
-    if (!acc[label]) acc[label] = [];
-    acc[label].push(person);
-    return acc;
-  }, {});
+    if (!map.has(label)) map.set(label, []);
+    map.get(label)!.push(person);
+  }
+
+  // Return as array so order is preserved (people are already sorted newest first from backend)
+  return Array.from(map.entries());
 }
 
-// ─── PersonCard ──────────────────────────────────────────────────────────────
+// ─── Person Card ──────────────────────────────────────────────────────────────
 
-function PersonCard({ person }: { person: Person }) {
-  const lastEncounter = person.encounters[0];
+function PersonCard({ person }: { person: PersonPreview }) {
+  const router = useRouter();
+  const lastEncounter = person.encounters[0] ?? null;
 
   return (
-    <div className="group flex items-center gap-4 p-4 rounded-xl bg-zinc-900 border border-zinc-800 hover:border-zinc-700 hover:bg-zinc-800/60 transition-all duration-200 cursor-pointer">
+    <div
+      onClick={() => router.push(`/camera/person/${person.id}`)}
+      className="group flex items-center gap-4 p-4 rounded-xl bg-zinc-900 border border-zinc-800 hover:border-zinc-700 hover:bg-zinc-800/60 transition-all duration-200 cursor-pointer"
+    >
       {/* Avatar */}
-      <div className="w-11 h-11 rounded-full bg-gradient-to-br from-zinc-600 to-zinc-800 border border-zinc-700 flex items-center justify-center text-white text-base font-semibold shrink-0 overflow-hidden">
-        {person.photoUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={person.photoUrl} alt={person.name ?? "Person"} className="w-full h-full object-cover" />
+      <div className="w-11 h-11 rounded-full bg-gradient-to-br from-zinc-600 to-zinc-800 border border-zinc-700 flex items-center justify-center shrink-0">
+        {person.name ? (
+          <span className="text-white text-sm font-semibold">
+            {person.name[0].toUpperCase()}
+          </span>
         ) : (
           <User size={18} className="text-zinc-400" />
         )}
@@ -57,6 +74,7 @@ function PersonCard({ person }: { person: Person }) {
 
       {/* Info */}
       <div className="flex-1 min-w-0">
+        {/* Name + relative time */}
         <div className="flex items-center gap-2">
           <span className="text-white font-medium text-sm truncate">
             {person.name ?? "Unknown person"}
@@ -69,9 +87,10 @@ function PersonCard({ person }: { person: Person }) {
           )}
         </div>
 
+        {/* Occupation + last summary */}
         <div className="flex items-center gap-3 mt-0.5">
           {person.occupation && (
-            <span className="text-zinc-500 text-xs flex items-center gap-1 truncate">
+            <span className="text-zinc-500 text-xs flex items-center gap-1 truncate max-w-[140px]">
               <Briefcase size={11} className="shrink-0" />
               {person.occupation}
             </span>
@@ -83,9 +102,22 @@ function PersonCard({ person }: { person: Person }) {
             </span>
           )}
         </div>
+
+        {/* Topics */}
+        {lastEncounter?.topics && lastEncounter.topics.length > 0 && (
+          <div className="flex flex-wrap gap-1 mt-1.5">
+            {lastEncounter.topics.slice(0, 3).map((t, i) => (
+              <span
+                key={i}
+                className="text-[10px] bg-zinc-800 text-zinc-500 px-1.5 py-0.5 rounded"
+              >
+                {t}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
 
-      {/* Arrow */}
       <ChevronRight
         size={16}
         className="text-zinc-700 group-hover:text-zinc-400 transition-colors shrink-0"
@@ -94,10 +126,11 @@ function PersonCard({ person }: { person: Person }) {
   );
 }
 
-// ─── Dashboard ───────────────────────────────────────────────────────────────
+// ─── Dashboard ────────────────────────────────────────────────────────────────
 
 export default function Dashboard() {
-  const [people, setPeople] = useState<Person[]>([]);
+  const router = useRouter();
+  const [people, setPeople] = useState<PersonPreview[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -105,9 +138,7 @@ export default function Dashboard() {
     getPeople()
       .then(setPeople)
       .catch((err) => {
-        setError(
-          err?.response?.data?.error ?? err?.message ?? "Failed to load people"
-        );
+        setError(err?.response?.data?.error ?? err?.message ?? "Failed to load");
       })
       .finally(() => setLoading(false));
   }, []);
@@ -115,8 +146,8 @@ export default function Dashboard() {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-24 text-zinc-600">
-        <Loader2 size={22} className="animate-spin mr-2" />
-        <span className="text-sm">Loading your connections…</span>
+        <Loader2 size={20} className="animate-spin mr-2" />
+        <span className="text-sm">Loading your connections...</span>
       </div>
     );
   }
@@ -124,7 +155,7 @@ export default function Dashboard() {
   if (error) {
     return (
       <div className="flex items-center justify-center py-24">
-        <p className="text-red-500 text-sm bg-red-500/10 border border-red-500/20 rounded-lg px-4 py-3">
+        <p className="text-red-400 text-sm bg-red-500/10 border border-red-500/20 rounded-lg px-4 py-3">
           {error}
         </p>
       </div>
@@ -133,14 +164,23 @@ export default function Dashboard() {
 
   if (people.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-24 gap-3 text-center">
+      <div className="flex flex-col items-center justify-center py-24 gap-4 text-center">
         <div className="w-14 h-14 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center">
-          <User size={24} className="text-zinc-600" />
+          <User size={22} className="text-zinc-600" />
         </div>
-        <p className="text-white font-medium text-sm">No connections yet</p>
-        <p className="text-zinc-600 text-xs max-w-xs">
-          Use the camera to recognize and add people you meet.
-        </p>
+        <div>
+          <p className="text-white font-medium text-sm">No connections yet</p>
+          <p className="text-zinc-600 text-xs mt-1 max-w-xs">
+            Use the camera to record people you meet.
+          </p>
+        </div>
+        <button
+          onClick={() => router.push("/camera/record")}
+          className="flex items-center gap-2 bg-white text-black text-xs font-semibold px-4 py-2 rounded-lg hover:bg-zinc-200 transition-colors cursor-pointer mt-1"
+        >
+          <Camera size={14} />
+          Record someone
+        </button>
       </div>
     );
   }
@@ -149,15 +189,17 @@ export default function Dashboard() {
 
   return (
     <div className="flex flex-col gap-8">
-      {Object.entries(groups).map(([date, group]) => (
+      {groups.map(([date, group]) => (
         <section key={date}>
-          <h2 className="text-xs font-semibold text-zinc-500 uppercase tracking-widest mb-3">
+          {/* Date header */}
+          <h2 className="text-[11px] font-semibold text-zinc-500 uppercase tracking-widest mb-3">
             {date}
           </h2>
+
           <div className="flex flex-col gap-2">
-            {/* {group.map((person) => (
+            {group.map((person) => (
               <PersonCard key={person.id} person={person} />
-            ))} */}
+            ))}
           </div>
         </section>
       ))}

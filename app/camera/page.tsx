@@ -5,8 +5,8 @@ import { useRouter } from "next/navigation";
 import { isAuthenticated } from "@/lib/auth";
 import Navbar from "../components/Navbar";
 import Dashboard from "../components/Dashboard";
-import Camera from "../components/Camera";
 import { ScanFace } from "lucide-react";
+import Link from "next/link";
 
 export default function CameraPage() {
   const router = useRouter();
@@ -36,36 +36,18 @@ export default function CameraPage() {
           </div>
 
           {/* Camera trigger */}
-          <button
-            onClick={() => setCameraOpen(true)}
-            className="flex items-center gap-2 bg-white text-zinc-950 hover:bg-zinc-100 rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors duration-200 shadow-lg shadow-white/5 shrink-0"
+          <Link
+            href="/camera/scan"
+            className="flex items-center gap-2 bg-white text-zinc-950 hover:bg-zinc-100 rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors duration-200 shadow-lg shadow-white/5 shrink-0 cursor-pointer"
           >
             <ScanFace size={17} />
             Scan face
-          </button>
+          </Link>
         </div>
 
         {/* People dashboard */}
         <Dashboard />
       </main>
-
-      {/* Camera modal */}
-      {cameraOpen && (
-        <div className="fixed inset-0 z-50 bg-zinc-950/90 backdrop-blur-sm flex items-center justify-center">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-xl mx-4 p-6 shadow-2xl">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-white font-semibold text-base">Face scanner</h2>
-              <button
-                onClick={() => setCameraOpen(false)}
-                className="text-zinc-500 hover:text-white w-8 h-8 rounded-full hover:bg-zinc-800 flex items-center justify-center transition-all"
-              >
-                &times;
-              </button>
-            </div>
-            <Camera />
-          </div>
-        </div>
-      )}
     </div>
   );
 }

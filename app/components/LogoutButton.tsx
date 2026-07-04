@@ -17,8 +17,6 @@ export default function LogoutButton({ variant = "default" }: LogoutButtonProps)
     router.push("/");
   };
 
-  console.log(user)
-
   return (
     <div className="flex items-center gap-3">
       {/* Avatar + username */}
