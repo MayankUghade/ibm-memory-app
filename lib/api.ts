@@ -141,6 +141,11 @@ export async function getPeople(): Promise<PersonPreview[]> {
   return data;
 }
 
+// DELETE /api/people/:id
+export async function deletePerson(id: string): Promise<void> {
+  await api.delete(`/api/people/${id}`);
+}
+
 // ---------------------------------------------------------------------------
 // Encounter endpoints
 // ---------------------------------------------------------------------------

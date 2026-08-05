@@ -2,7 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import { LogOut, User } from "lucide-react";
-import { removeToken, decodeToken } from "@/lib/auth";
+import { removeToken, decodeToken, TokenPayload } from "@/lib/auth";
+import { useEffect, useState } from "react";
 
 interface LogoutButtonProps {
   variant?: "default" | "navbar";
@@ -10,21 +11,29 @@ interface LogoutButtonProps {
 
 export default function LogoutButton({ variant = "default" }: LogoutButtonProps) {
   const router = useRouter();
-  const user = decodeToken();
+  const [mounted, setMounted] = useState(false);
+  const [user, setUser] = useState<TokenPayload | null>(null);
+
+  useEffect(() => {
+    setMounted(true);
+    setUser(decodeToken());
+  }, []);
 
   const handleLogout = () => {
     removeToken();
     router.push("/");
   };
 
+  const displayUser = mounted ? user : null;
+
   return (
     <div className="flex items-center gap-3">
       {/* Avatar + username */}
       <div className="flex items-center gap-2">
         <div className="w-7 h-7 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-xs font-bold text-white shrink-0">
-          {user?.username?.[0]?.toUpperCase() ?? <User size={12} />}
+          {displayUser?.username?.[0]?.toUpperCase() ?? <User size={12} />}
         </div>
-        <span className="text-sm text-zinc-300 font-medium">{user?.username ?? "User"}</span>
+        <span className="text-sm text-zinc-300 font-medium">{displayUser?.username ?? "User"}</span>
       </div>
 
       {/* Logout */}
@@ -39,3 +48,4 @@ export default function LogoutButton({ variant = "default" }: LogoutButtonProps)
     </div>
   );
 }
+

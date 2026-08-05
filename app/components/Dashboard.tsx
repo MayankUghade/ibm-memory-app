@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getPeople, PersonPreview } from "@/lib/api";
+import { getPeople, deletePerson, PersonPreview } from "@/lib/api";
 import {
   User,
   Clock,
@@ -11,17 +11,22 @@ import {
   ChevronRight,
   Loader2,
   Camera,
+  Trash2,
 } from "lucide-react";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString("en-US", {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-    year: "numeric",
-  });
+function getRelativeBucket(iso: string): string {
+  const date = new Date(iso);
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const startOfYesterday = new Date(startOfToday.getTime() - 86400000);
+  const startOfWeek = new Date(startOfToday.getTime() - 6 * 86400000);
+
+  if (date >= startOfToday) return "Today";
+  if (date >= startOfYesterday) return "Yesterday";
+  if (date >= startOfWeek) return "This Week";
+  return "Earlier";
 }
 
 function formatRelativeTime(iso: string) {
@@ -35,30 +40,61 @@ function formatRelativeTime(iso: string) {
   return "Just now";
 }
 
-// Group people by the date of their most recent encounter
-function groupByDate(people: PersonPreview[]): [string, PersonPreview[]][] {
-  const map = new Map<string, PersonPreview[]>();
+// Group people by relative time bucket, sorted by most recent encounter
+const BUCKET_ORDER = ["Today", "Yesterday", "This Week", "Earlier"];
 
-  for (const person of people) {
+function groupByRelativeTime(people: PersonPreview[]): [string, PersonPreview[]][] {
+  // Sort people by most recent encounter descending
+  const sorted = [...people].sort((a, b) => {
+    const aTime = new Date(a.encounters[0]?.date ?? a.createdAt).getTime();
+    const bTime = new Date(b.encounters[0]?.date ?? b.createdAt).getTime();
+    return bTime - aTime;
+  });
+
+  const map = new Map<string, PersonPreview[]>();
+  for (const person of sorted) {
     const anchor = person.encounters[0]?.date ?? person.createdAt;
-    const label = formatDate(anchor);
-    if (!map.has(label)) map.set(label, []);
-    map.get(label)!.push(person);
+    const bucket = getRelativeBucket(anchor);
+    if (!map.has(bucket)) map.set(bucket, []);
+    map.get(bucket)!.push(person);
   }
 
-  // Return as array so order is preserved (people are already sorted newest first from backend)
-  return Array.from(map.entries());
+  return BUCKET_ORDER.filter((b) => map.has(b)).map((b) => [b, map.get(b)!]);
 }
 
 // ─── Person Card ──────────────────────────────────────────────────────────────
 
-function PersonCard({ person }: { person: PersonPreview }) {
+function PersonCard({
+  person,
+  onDelete,
+}: {
+  person: PersonPreview;
+  onDelete: (id: string) => void;
+}) {
   const router = useRouter();
   const lastEncounter = person.encounters[0] ?? null;
+  const [confirming, setConfirming] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  async function handleDelete(e: React.MouseEvent) {
+    e.stopPropagation();
+    if (!confirming) {
+      setConfirming(true);
+      return;
+    }
+    setDeleting(true);
+    try {
+      await deletePerson(person.id);
+      onDelete(person.id);
+    } catch {
+      setDeleting(false);
+      setConfirming(false);
+    }
+  }
 
   return (
     <div
-      onClick={() => router.push(`/camera/person/${person.id}`)}
+      onClick={() => !confirming && router.push(`/camera/person/${person.id}`)}
       className="group flex items-center gap-4 p-4 rounded-xl bg-zinc-900 border border-zinc-800 hover:border-zinc-700 hover:bg-zinc-800/60 transition-all duration-200 cursor-pointer"
     >
       {/* Avatar */}
@@ -118,6 +154,31 @@ function PersonCard({ person }: { person: PersonPreview }) {
         )}
       </div>
 
+      {/* Delete / Confirm */}
+      <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
+        {confirming && (
+          <button
+            onClick={handleDelete}
+            disabled={deleting}
+            className="text-[11px] font-semibold text-red-400 border border-red-500/40 bg-red-500/10 px-2 py-1 rounded-md hover:bg-red-500/20 transition-colors disabled:opacity-50"
+          >
+            {deleting ? "Deleting…" : "Confirm"}
+          </button>
+        )}
+        <button
+          onClick={handleDelete}
+          onBlur={() => setTimeout(() => setConfirming(false), 150)}
+          className={`p-1.5 rounded-lg transition-colors ${
+            confirming
+              ? "text-red-400 bg-red-500/10"
+              : "text-zinc-700 hover:text-red-400 hover:bg-red-500/10"
+          }`}
+          title={confirming ? "Click again to confirm" : "Delete person"}
+        >
+          {deleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+        </button>
+      </div>
+
       <ChevronRight
         size={16}
         className="text-zinc-700 group-hover:text-zinc-400 transition-colors shrink-0"
@@ -133,6 +194,10 @@ export default function Dashboard() {
   const [people, setPeople] = useState<PersonPreview[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  function handleDelete(id: string) {
+    setPeople((prev) => prev.filter((p) => p.id !== id));
+  }
 
   useEffect(() => {
     getPeople()
@@ -185,7 +250,7 @@ export default function Dashboard() {
     );
   }
 
-  const groups = groupByDate(people);
+  const groups = groupByRelativeTime(people);
 
   return (
     <div className="flex flex-col gap-8">
@@ -198,7 +263,7 @@ export default function Dashboard() {
 
           <div className="flex flex-col gap-2">
             {group.map((person) => (
-              <PersonCard key={person.id} person={person} />
+              <PersonCard key={person.id} person={person} onDelete={handleDelete} />
             ))}
           </div>
         </section>
