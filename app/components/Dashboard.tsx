@@ -13,6 +13,7 @@ import {
   Camera,
   Trash2,
 } from "lucide-react";
+import ChatWidget from "./ChatWidget";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -268,6 +269,7 @@ export default function Dashboard() {
           </div>
         </section>
       ))}
+      <ChatWidget />
     </div>
   );
 }

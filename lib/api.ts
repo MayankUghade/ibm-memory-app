@@ -193,4 +193,25 @@ export async function createEncounter(
   return data;
 }
 
+// ---------------------------------------------------------------------------
+// Chat endpoint
+// ---------------------------------------------------------------------------
+
+export interface ChatRequestPayload {
+  message: string;
+}
+
+export interface ChatResponse {
+  reply: string;
+  encounters: Encounter[];
+}
+
+// POST /api/chat
+export async function getChatResponse(
+  message: string
+): Promise<ChatResponse> {
+  const { data } = await api.post<ChatResponse>("/api/chat", { message });
+  return data;
+}
+
 export default api;
